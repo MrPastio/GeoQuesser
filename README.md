@@ -2,6 +2,8 @@
 
 Браузерная игра: по фото с улицы угадай, где оно снято. Бесплатно, без ключей и регистрации.
 
+**Играть:** https://mrpastio.github.io/GeoQuesser/ (GitHub Pages, обновляется при каждом push в `main`).
+
 - **Фото и панорамы 360°:** открытый каталог [Panoramax](https://panoramax.fr) (STAC API `api.panoramax.xyz`, CC BY-SA).
 - **Карта:** Leaflet и тайлы OpenStreetMap.
 - **Просмотр:** Pannellum (WebGL). Если WebGL нет, включается простой просмотрщик (`js/flatview.js`).
