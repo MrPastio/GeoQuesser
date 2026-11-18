@@ -110,12 +110,18 @@ function pickWeighted(boxes, rnd) {
   return boxes[boxes.length - 1];
 }
 
-async function findLocation(o, usedCollections) {
+function fmtCoord(lat, lon) {
+  const ns = lat >= 0 ? 'N' : 'S', ew = lon >= 0 ? 'E' : 'W';
+  return `${Math.abs(lat).toFixed(4)}°${ns}  ${Math.abs(lon).toFixed(4)}°${ew}`;
+}
+
+async function findLocation(o, usedCollections, onProbe = () => {}) {
   const region = REGIONS[o.region];
   const rnd = Math.random;
   for (let attempt = 0; attempt < 30; attempt++) {
     const box = pickWeighted(region.boxes, rnd);
     const [lon, lat] = randomIn(box.b, rnd);
+    onProbe(lat, lon);
     const half = Math.min(0.25 * 2 ** Math.floor(attempt / 6), 4) * (o.only360 ? 2 : 1);
     const bbox = [lon - half, lat - half, lon + half, lat + half].map((v) => v.toFixed(5)).join(',');
     let url = `${API}/search?limit=60&bbox=${bbox}`;
@@ -139,13 +145,13 @@ async function loadFeature(cid, id) {
   return getJSON(`${API}/collections/${encodeURIComponent(cid)}/items/${encodeURIComponent(id)}`);
 }
 
-async function locationForRound(i) {
+async function locationForRound(i, onProbe) {
   if (game.seeded) {
     const [cid, id] = game.seeded[i];
     return withImage(await loadFeature(cid, id));
   }
   const used = new Set(game.rounds.filter(Boolean).map((r) => r.feature.collection));
-  return findLocation(game.opts, used);
+  return findLocation(game.opts, used, onProbe);
 }
 
 // ---------- панорама ----------
@@ -233,9 +239,10 @@ async function walk(f) {
 }
 
 // ---------- игра ----------
-function setLoading(on, text = 'Ищем место…') {
+function setLoading(on, text = 'Ищем место', coords = '') {
   $('loading').classList.toggle('hidden', !on);
   $('loading-text').textContent = text;
+  $('loading-coords').textContent = coords || ' ';
 }
 
 function initGuessMap() {
@@ -249,8 +256,13 @@ function initGuessMap() {
   guessMap.fitBounds([[ext.minLat, ext.minLon], [ext.maxLat, ext.maxLon]]);
   setTimeout(() => guessMap.invalidateSize(), 50);
 }
-function pinIcon(kind) {
-  return L.divIcon({ className: '', html: `<div class="pin ${kind}"></div>`, iconSize: [22, 22], iconAnchor: [3, 22] });
+function pinIcon(kind, label = '') {
+  const size = kind === 'real' ? 28 : 16;
+  return L.divIcon({
+    className: '',
+    html: `<div class="pin-${kind}">${label ? `<i>${label}</i>` : ''}</div>`,
+    iconSize: [size, size], iconAnchor: [size / 2, size / 2], tooltipAnchor: [0, -size / 2],
+  });
 }
 function placeGuess(latlng) {
   const ll = latlng.wrap();
@@ -279,10 +291,12 @@ async function playRound() {
   $('guess-btn').textContent = 'Поставь метку на карте';
   $('hud-timer-wrap').classList.toggle('hidden', !game.opts.time);
   $('hud-timer-wrap').classList.remove('warn');
-  setLoading(true);
+  setLoading(true, game.seeded ? 'Загружаем место из вызова' : 'Ищем место');
   let f;
   try {
-    f = await (prefetch?.i === i ? prefetch.p : locationForRound(i));
+    // координаты, которые сейчас проверяются в каталоге — настоящие, а не декорация
+    const probe = (lat, lon) => { if (game?.index === i) setLoading(true, 'Ищем место', fmtCoord(lat, lon)); };
+    f = await (prefetch?.i === i ? prefetch.p : locationForRound(i, probe));
   } catch (e) {
     setLoading(false);
     toast(e.message || 'Ошибка сети', 5000);
@@ -344,19 +358,20 @@ function initResultMap() {
   }
   resultMap.eachLayer((l) => { if (!(l instanceof L.TileLayer)) l.remove(); });
 }
-function drawRound(r, label) {
+function drawRound(r, n) {
   const real = featureLatLng(r.feature);
   const pts = [[real.lat, real.lng]];
-  L.marker(real, { icon: pinIcon('real') }).addTo(resultMap).bindTooltip(label ? `${label}: здесь` : 'Здесь');
   if (r.guess) {
     // рисуем линию к ближайшей «копии» мира, чтобы не тянуть её через всю карту
-    let g = { lat: r.guess.lat, lng: r.guess.lng };
+    const g = { lat: r.guess.lat, lng: r.guess.lng };
     if (g.lng - real.lng > 180) g.lng -= 360;
     if (real.lng - g.lng > 180) g.lng += 360;
-    L.marker(g, { icon: pinIcon('guess') }).addTo(resultMap).bindTooltip(label ? `${label}: ваш ответ` : 'Ваш ответ');
-    L.polyline([real, g], { color: '#1d1606', weight: 3, dashArray: '6 8', opacity: .8 }).addTo(resultMap);
+    L.polyline([real, g], { color: '#d9411e', weight: 2, dashArray: '2 7', lineCap: 'round' }).addTo(resultMap);
+    L.marker(g, { icon: pinIcon('guess') }).addTo(resultMap).bindTooltip(n ? `${n} · ваш ответ` : 'Ваш ответ', { direction: 'top' });
     pts.push([g.lat, g.lng]);
   }
+  L.marker(real, { icon: pinIcon('real', n || ''), zIndexOffset: 500 }).addTo(resultMap)
+    .bindTooltip(`${n ? n + ' · ' : ''}${fmtCoord(real.lat, real.lng)}`, { direction: 'top' });
   return pts;
 }
 // Отступы для fitBounds: метки не должны прятаться под карточкой результата.
@@ -382,17 +397,29 @@ function showRoundResult(r, timeout) {
     if (pts.length > 1) resultMap.fitBounds(pts, fitPadding(14));
     else resultMap.setView(pts[0], 6);
   }, 30);
-  $('result-title').textContent = `Раунд ${game.index + 1} из ${game.opts.rounds}`;
-  animateNumber($('result-points'), r.points);
-  requestAnimationFrame(() => { $('result-bar').style.width = '0'; requestAnimationFrame(() => { $('result-bar').style.width = `${(r.points / MAX_POINTS) * 100}%`; }); });
-  $('result-dist').textContent = r.guess
-    ? `Ваш ответ в ${fmtDist(r.dist)} от места`
-    : (timeout ? 'Время вышло — метка не поставлена' : 'Метка не поставлена');
+  $('result-title').textContent = `Раунд ${game.index + 1} из ${game.opts.rounds} · ${REGIONS[game.opts.region].name}`;
+  setScale(r.points, MAX_POINTS);
+  $('result-dist').innerHTML = r.guess
+    ? `Ошибка — <b>${fmtDist(r.dist)}</b>.`
+    : (timeout ? 'Время вышло, метка не поставлена.' : 'Метка не поставлена.');
   $('result-credit').innerHTML = creditHtml(r.feature);
   $('final-extra').classList.add('hidden');
   const last = game.index + 1 >= game.opts.rounds;
   $('next-btn').textContent = last ? 'Итоги игры' : 'Следующий раунд';
   $('next-btn').onclick = last ? showFinal : () => { game.index += 1; show('game'); playRound(); };
+}
+
+// Число очков, подпись «/ максимум» и масштабная линейка.
+function setScale(points, max) {
+  const fmt = (n) => n.toLocaleString('ru-RU');
+  animateNumber($('result-points'), points);
+  $('result-max').textContent = `/ ${fmt(max)}`;
+  $('scale-max').textContent = fmt(max);
+  $('scale-max').previousElementSibling.textContent = fmt(max / 2);
+  const bar = $('result-bar');
+  bar.style.transition = 'none'; bar.style.width = '0';
+  void bar.offsetWidth;
+  bar.style.transition = ''; bar.style.width = `${(points / max) * 100}%`;
 }
 
 function animateNumber(el, to) {
@@ -427,16 +454,20 @@ function showFinal() {
   initResultMap();
   setTimeout(() => {
     resultMap.invalidateSize();
-    const all = game.rounds.flatMap((r, i) => drawRound(r, `Раунд ${i + 1}`));
+    const all = game.rounds.flatMap((r, i) => drawRound(r, i + 1));
     resultMap.fitBounds(all, fitPadding(12));
   }, 30);
-  $('result-title').textContent = `Итог · ${REGIONS[game.opts.region].name}`;
-  animateNumber($('result-points'), total);
-  $('result-bar').style.width = `${(total / max) * 100}%`;
-  $('result-dist').textContent = `из ${max.toLocaleString('ru-RU')} возможных`;
+  $('result-title').textContent = `Итог · ${REGIONS[game.opts.region].name} · ${game.opts.rounds} раунд.`;
+  setScale(total, max);
+  const answered = game.rounds.filter((r) => r.guess);
+  const median = answered.length
+    ? answered.map((r) => r.dist).sort((a, b) => a - b)[Math.floor((answered.length - 1) / 2)] : null;
+  $('result-dist').innerHTML = median === null
+    ? 'Ни одной метки за игру.'
+    : `Типичная ошибка — <b>${fmtDist(median)}</b>.`;
   $('result-credit').innerHTML = '';
-  $('rounds-list').innerHTML = game.rounds.map((r) =>
-    `<li><span>${r.guess ? fmtDist(r.dist) : 'без ответа'}</span><span>${r.points.toLocaleString('ru-RU')}</span></li>`).join('');
+  $('rounds-list').innerHTML = game.rounds.map((r, i) =>
+    `<tr><td class="idx">${String(i + 1).padStart(2, '0')}</td><td class="dim">${r.guess ? fmtDist(r.dist) : 'без ответа'}</td><td class="num">${r.points.toLocaleString('ru-RU')}</td></tr>`).join('');
   $('share-link').value = challengeLink();
   $('final-extra').classList.remove('hidden');
   $('next-btn').textContent = 'В меню';
@@ -453,21 +484,21 @@ function saveBest(total, max) {
 function renderBest() {
   const best = storageGet(BEST_KEY, []);
   $('best').innerHTML = best.length
-    ? best.map((b) => `<li><b>${b.s.toLocaleString('ru-RU')}</b> / ${b.m.toLocaleString('ru-RU')} · ${escapeHtml(REGIONS[b.r]?.name || b.r)} · ${new Date(b.d).toLocaleDateString('ru-RU')}</li>`).join('')
-    : '<li>Пока пусто — сыграй первую партию.</li>';
+    ? best.map((b) => `<tr><td>${escapeHtml(REGIONS[b.r]?.name || b.r)}</td><td class="dim">${new Date(b.d).toLocaleDateString('ru-RU')}</td><td class="num">${b.s.toLocaleString('ru-RU')} <span class="dim">/ ${b.m.toLocaleString('ru-RU')}</span></td></tr>`).join('')
+    : '<tr><td class="empty">Здесь появятся твои лучшие партии.</td></tr>';
 }
 
 // ---------- меню ----------
 function initMenu() {
   const reg = $('regions');
-  reg.innerHTML = Object.entries(REGIONS).map(([k, r]) =>
-    `<button data-v="${k}" class="${k === opts.region ? 'on' : ''}">${r.name}</button>`).join('');
+  reg.innerHTML = Object.entries(REGIONS).map(([k, r], i) =>
+    `<button type="button" data-v="${k}" class="${k === opts.region ? 'on' : ''}"><span class="n">${String(i + 1).padStart(2, '0')}</span><span class="name">${r.name}</span></button>`).join('');
   reg.addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
     opts.region = b.dataset.v;
     reg.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
   });
-  document.querySelectorAll('.chips[data-opt]').forEach((group) => {
+  document.querySelectorAll('.seg[data-opt]').forEach((group) => {
     group.addEventListener('click', (e) => {
       const b = e.target.closest('button'); if (!b) return;
       const key = group.dataset.opt, v = Number(b.dataset.v);
@@ -494,7 +525,12 @@ function initGameControls() {
   $('step-next').onclick = () => walk(neighbors.next);
   $('back-start').onclick = () => walk(game.rounds[game.index].feature);
   $('map-pin').onclick = () => { $('guess-box').classList.toggle('pinned'); $('map-pin').classList.toggle('on'); setTimeout(() => guessMap.invalidateSize(), 220); };
-  $('map-size').onclick = () => { $('guess-box').classList.toggle('big'); setTimeout(() => guessMap.invalidateSize(), 220); };
+  $('map-size').onclick = () => {
+    const big = $('guess-box').classList.toggle('big');
+    $('map-size').classList.toggle('on', big);
+    $('map-size').textContent = big ? 'мельче' : 'крупнее';
+    setTimeout(() => guessMap.invalidateSize(), 240);
+  };
   $('guess-box').addEventListener('transitionend', () => guessMap?.invalidateSize());
   $('copy-link').onclick = async () => {
     try { await navigator.clipboard.writeText($('share-link').value); toast('Ссылка скопирована'); }

@@ -64,15 +64,15 @@ const OCEANIA = [
 const FRANCE = [{ b: [-5, 42.3, 8.2, 51.1], w: 1 }];
 
 export const REGIONS = {
-  world: { name: '🌍 Весь мир', boxes: [...EUROPE, ...CIS, ...NAMERICA, ...SAMERICA, ...ASIA, ...AFRICA, ...OCEANIA] },
+  world: { name: 'Весь мир', boxes: [...EUROPE, ...CIS, ...NAMERICA, ...SAMERICA, ...ASIA, ...AFRICA, ...OCEANIA] },
   europe: { name: 'Европа', boxes: EUROPE },
   cis: { name: 'Россия и СНГ', boxes: CIS },
   namerica: { name: 'Северная Америка', boxes: NAMERICA },
   samerica: { name: 'Южная Америка', boxes: SAMERICA },
   asia: { name: 'Азия', boxes: ASIA },
   africa: { name: 'Африка', boxes: AFRICA },
-  oceania: { name: 'Австралия и Океания', boxes: OCEANIA },
-  france: { name: 'Франция (много снимков)', boxes: FRANCE },
+  oceania: { name: 'Океания', boxes: OCEANIA },
+  france: { name: 'Франция', boxes: FRANCE },
 };
 
 const extentCache = {};

@@ -2,133 +2,161 @@
 <html lang="ru">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>GeoQuesser</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>GeoQuesser — угадай, где снято</title>
+  <meta name="description" content="Бесплатная игра: по фото с улицы угадай место на карте. Открытые снимки Panoramax, без регистрации.">
+  <meta name="theme-color" content="#efeadf">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23efeadf'/%3E%3Ccircle cx='16' cy='16' r='9' fill='none' stroke='%23d9411e' stroke-width='3'/%3E%3Cpath d='M16 2v8M16 22v8M2 16h8M22 16h8' stroke='%2318171a' stroke-width='2.5'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pannellum/2.5.6/pannellum.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Inter:wght@400;500;600&display=swap">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,600;1,300;1,400&family=Golos+Text:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 
-<!-- Меню -->
+<!-- ============ Меню ============ -->
 <section id="menu" class="screen active">
-  <div class="menu-wrap">
-    <header class="brand">
-      <div class="logo">◎</div>
-      <div>
-        <h1>GeoQuesser</h1>
-        <p class="tagline">Угадай место по фото с улиц. Бесплатно, без регистрации, на открытых данных.</p>
+  <div class="menu">
+
+    <header class="masthead">
+      <div class="kicker mono">
+        <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="9"/><path d="M16 2v8M16 22v8M2 16h8M22 16h8"/></svg>
+        Игра на открытых снимках улиц
       </div>
+      <h1>Geo<em>Quesser</em></h1>
+      <p class="lede">Тебя высаживают в&nbsp;случайной точке. Смотри по&nbsp;сторонам: вывески, разметка, номера, деревья, солнце. Потом отметь на&nbsp;карте, где ты&nbsp;стоишь.</p>
+      <dl class="facts mono">
+        <div><dt>Цена</dt><dd>0 ₽</dd></div>
+        <div><dt>Аккаунт</dt><dd>не нужен</dd></div>
+        <div><dt>Очков за раунд</dt><dd>до 5 000</dd></div>
+      </dl>
     </header>
 
-    <div class="panel">
-      <h2>Регион</h2>
-      <div id="regions" class="chips"></div>
-    </div>
+    <form class="setup" id="setup" onsubmit="return false">
+      <fieldset class="field">
+        <legend class="label mono">Регион</legend>
+        <div id="regions" class="regions"></div>
+      </fieldset>
 
-    <div class="panel grid2">
-      <div>
-        <h2>Раундов</h2>
-        <div class="chips" data-opt="rounds">
-          <button data-v="3">3</button><button data-v="5" class="on">5</button><button data-v="10">10</button>
+      <div class="field row-field">
+        <span class="label mono">Раунды</span>
+        <div class="seg" data-opt="rounds">
+          <button type="button" data-v="3">3</button><button type="button" data-v="5" class="on">5</button><button type="button" data-v="10">10</button>
         </div>
       </div>
-      <div>
-        <h2>Время на раунд</h2>
-        <div class="chips" data-opt="time">
-          <button data-v="0" class="on">Без лимита</button><button data-v="120">2 мин</button><button data-v="60">1 мин</button><button data-v="30">30 с</button>
+      <div class="field row-field">
+        <span class="label mono">Время</span>
+        <div class="seg" data-opt="time">
+          <button type="button" data-v="0" class="on">∞</button><button type="button" data-v="120">2:00</button><button type="button" data-v="60">1:00</button><button type="button" data-v="30">0:30</button>
         </div>
       </div>
-      <div>
-        <h2>Снимки</h2>
-        <div class="chips" data-opt="only360">
-          <button data-v="0" class="on">Все</button><button data-v="1">Только 360°</button>
+      <div class="field row-field">
+        <span class="label mono">Снимки</span>
+        <div class="seg" data-opt="only360">
+          <button type="button" data-v="0" class="on">любые</button><button type="button" data-v="1">только 360°</button>
         </div>
       </div>
-      <div>
-        <h2>Перемещение</h2>
-        <div class="chips" data-opt="move">
-          <button data-v="1" class="on">Можно ходить</button><button data-v="0">Стоять на месте</button>
+      <div class="field row-field">
+        <span class="label mono">Ходьба</span>
+        <div class="seg" data-opt="move">
+          <button type="button" data-v="1" class="on">можно</button><button type="button" data-v="0">нельзя</button>
         </div>
       </div>
-    </div>
 
-    <button id="start" class="big">Играть</button>
+      <button type="button" id="start" class="go">Начать <span class="arrow">→</span></button>
+    </form>
 
-    <div class="panel">
-      <h2>Вызов от друга</h2>
-      <div class="row">
-        <input id="challenge-input" placeholder="Вставь ссылку на вызов">
-        <button id="challenge-go" class="ghost">Принять</button>
-      </div>
-    </div>
+    <aside class="side">
+      <section class="block">
+        <h2 class="label mono">Вызов от друга</h2>
+        <div class="inline">
+          <input id="challenge-input" placeholder="Вставь ссылку" aria-label="Ссылка на вызов">
+          <button type="button" id="challenge-go" class="btn">Принять</button>
+        </div>
+      </section>
+      <section class="block">
+        <h2 class="label mono">Журнал</h2>
+        <table class="ledger mono"><tbody id="best"></tbody></table>
+      </section>
+    </aside>
 
-    <div class="panel">
-      <h2>Лучшие результаты</h2>
-      <ol id="best" class="best"></ol>
-    </div>
-
-    <footer class="foot">
-      Фото: <a href="https://panoramax.fr" target="_blank" rel="noopener">Panoramax</a> (CC BY-SA).
-      Карта: © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>.
+    <footer class="foot mono">
+      Снимки — <a href="https://panoramax.fr" target="_blank" rel="noopener">Panoramax</a>, CC&nbsp;BY-SA, авторы указаны после каждого раунда.
+      Карта — © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">участники OpenStreetMap</a>.
     </footer>
   </div>
 </section>
 
-<!-- Игра -->
+<!-- ============ Игра ============ -->
 <section id="game" class="screen">
   <div id="pano"></div>
-  <div id="loading" class="loading hidden"><div class="spinner"></div><span id="loading-text">Ищем место…</span></div>
 
-  <div class="hud">
-    <div class="hud-item"><span class="hud-label">Раунд</span><span id="hud-round">1/5</span></div>
-    <div class="hud-item"><span class="hud-label">Очки</span><span id="hud-score">0</span></div>
-    <div class="hud-item" id="hud-timer-wrap"><span class="hud-label">Время</span><span id="hud-timer">—</span></div>
+  <div id="loading" class="loading hidden">
+    <div class="probe">
+      <svg class="mark spin" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="9"/><path d="M16 2v8M16 22v8M2 16h8M22 16h8"/></svg>
+      <div>
+        <div class="label mono" id="loading-text">Ищем место</div>
+        <div class="coords mono" id="loading-coords">&nbsp;</div>
+      </div>
+    </div>
   </div>
 
-  <button id="quit" class="icon-btn" title="В меню">✕</button>
+  <button id="quit" class="tool" title="Выйти в меню" aria-label="Выйти в меню">
+    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3l10 10M13 3L3 13"/></svg>
+  </button>
 
-  <div class="nav-btns" id="nav-btns">
-    <button id="back-start" class="icon-btn" title="Вернуться к началу">⌂</button>
-    <button id="step-prev" class="icon-btn" title="Назад по маршруту">◀</button>
-    <button id="step-next" class="icon-btn" title="Вперёд по маршруту">▶</button>
+  <div class="hud mono">
+    <div class="hud-cell"><span>раунд</span><b id="hud-round">1/5</b></div>
+    <div class="hud-cell"><span>счёт</span><b id="hud-score">0</b></div>
+    <div class="hud-cell" id="hud-timer-wrap"><span>время</span><b id="hud-timer">—</b></div>
+  </div>
+
+  <div class="walk mono" id="nav-btns">
+    <button id="step-prev" title="Назад по маршруту">← назад</button>
+    <button id="back-start" title="Вернуться к началу">старт</button>
+    <button id="step-next" title="Вперёд по маршруту">вперёд →</button>
   </div>
 
   <div id="guess-box" class="guess-box">
-    <div class="guess-tools">
-      <button id="map-size" class="icon-btn small" title="Размер карты">⤢</button>
-      <button id="map-pin" class="icon-btn small" title="Закрепить карту">📌</button>
+    <div class="guess-head mono">
+      <span>Где это?</span>
+      <span class="guess-tools">
+        <button id="map-size" type="button">крупнее</button>
+        <button id="map-pin" type="button">закрепить</button>
+      </span>
     </div>
     <div id="guess-map"></div>
     <button id="guess-btn" disabled>Поставь метку на карте</button>
   </div>
 </section>
 
-<!-- Итог раунда / игры -->
+<!-- ============ Итог раунда / игры ============ -->
 <section id="result" class="screen">
   <div id="result-map"></div>
   <div class="result-card">
-    <div id="result-title" class="result-title"></div>
-    <div class="result-points"><span id="result-points">0</span> <small>очков</small></div>
-    <div class="bar"><div id="result-bar"></div></div>
+    <div id="result-title" class="label mono"></div>
+    <div class="result-points mono"><span id="result-points">0</span><small id="result-max">/ 5 000</small></div>
+    <div class="scale" aria-hidden="true">
+      <div class="scale-track"><div id="result-bar"></div></div>
+      <div class="scale-ticks mono"><span>0</span><span>2 500</span><span id="scale-max">5 000</span></div>
+    </div>
     <div id="result-dist" class="result-dist"></div>
-    <div id="result-credit" class="credit"></div>
     <div id="final-extra" class="final-extra hidden">
-      <ol id="rounds-list" class="rounds-list"></ol>
-      <div class="row">
-        <input id="share-link" readonly>
-        <button id="copy-link" class="ghost">Копировать</button>
+      <table class="ledger mono"><tbody id="rounds-list"></tbody></table>
+      <div class="label mono share-label">Брось вызов: друг сыграет на тех же местах</div>
+      <div class="inline">
+        <input id="share-link" readonly aria-label="Ссылка на вызов">
+        <button type="button" id="copy-link" class="btn">Копировать</button>
       </div>
     </div>
-    <div class="row">
-      <button id="next-btn" class="big">Дальше</button>
-    </div>
+    <button id="next-btn" class="go">Дальше</button>
+    <div id="result-credit" class="credit mono"></div>
   </div>
 </section>
 
-<div id="toast" class="toast hidden"></div>
+<div id="toast" class="toast mono hidden" role="status"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pannellum/2.5.6/pannellum.js"></script>
