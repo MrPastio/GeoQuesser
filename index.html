@@ -43,13 +43,13 @@
       <div class="field row-field">
         <span class="label mono">Раунды</span>
         <div class="seg" data-opt="rounds">
-          <button type="button" data-v="3">3</button><button type="button" data-v="5" class="on">5</button><button type="button" data-v="10">10</button>
+          <button type="button" data-v="3">3</button><button type="button" data-v="5" class="on">5</button><button type="button" data-v="10">10</button><button type="button" data-v="0" title="Бесконечно, пока сам не закончишь">∞</button>
         </div>
       </div>
       <div class="field row-field">
         <span class="label mono">Время</span>
         <div class="seg" data-opt="time">
-          <button type="button" data-v="0" class="on">∞</button><button type="button" data-v="120">2:00</button><button type="button" data-v="60">1:00</button><button type="button" data-v="30">0:30</button>
+          <button type="button" data-v="0" class="on">нет</button><button type="button" data-v="120">2:00</button><button type="button" data-v="60">1:00</button><button type="button" data-v="30">0:30</button>
         </div>
       </div>
       <div class="field row-field">
@@ -152,6 +152,7 @@
       </div>
     </div>
     <button id="next-btn" class="go">Дальше</button>
+    <button id="finish-btn" class="btn-line mono hidden">Закончить</button>
     <div id="result-credit" class="credit mono"></div>
   </div>
 </section>

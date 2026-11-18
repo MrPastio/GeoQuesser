@@ -98,6 +98,12 @@ function releaseImages() {
   blobUrls.forEach((u) => URL.revokeObjectURL(u));
   blobUrls.clear();
 }
+// После ответа снимки раунда больше не нужны; оставляем только заранее загруженный следующий.
+// Без этого в бесконечном режиме память росла бы с каждым раундом.
+function releaseImagesExceptPrefetch() {
+  const keep = prefetch?.f?._img;
+  blobUrls.forEach((u) => { if (u !== keep) { URL.revokeObjectURL(u); blobUrls.delete(u); } });
+}
 
 function randomIn(box, rnd) {
   const [x1, y1, x2, y2] = box;
@@ -150,7 +156,8 @@ async function locationForRound(i, onProbe) {
     const [cid, id] = game.seeded[i];
     return withImage(await loadFeature(cid, id));
   }
-  const used = new Set(game.rounds.filter(Boolean).map((r) => r.feature.collection));
+  // не повторяем маршруты последних 50 раундов (в бесконечном режиме полный запрет со временем исчерпал бы регион)
+  const used = new Set(game.rounds.filter(Boolean).slice(-50).map((r) => r.feature.collection));
   return findLocation(game.opts, used, onProbe);
 }
 
@@ -274,8 +281,10 @@ function placeGuess(latlng) {
 
 function startGame(o, seeded = null) {
   releaseImages();
-  game ={ opts: { ...o }, rounds: [], index: 0, seeded };
+  game = { opts: { ...o }, rounds: [], index: 0, seeded };
   if (seeded) game.opts.rounds = seeded.length;
+  // rounds = 0 — бесконечный режим: раунды идут, пока игрок сам не закончит
+  game.endless = game.opts.rounds === 0;
   prefetch = null;
   show('game');
   initGuessMap();
@@ -285,7 +294,7 @@ function startGame(o, seeded = null) {
 async function playRound() {
   clearInterval(timerId);
   const i = game.index;
-  $('hud-round').textContent = `${i + 1}/${game.opts.rounds}`;
+  $('hud-round').textContent = game.endless ? `${i + 1} / ∞` : `${i + 1}/${game.opts.rounds}`;
   $('hud-score').textContent = totalScore().toLocaleString('ru-RU');
   $('guess-btn').disabled = true;
   $('guess-btn').textContent = 'Поставь метку на карте';
@@ -298,9 +307,12 @@ async function playRound() {
     const probe = (lat, lon) => { if (game?.index === i) setLoading(true, 'Ищем место', fmtCoord(lat, lon)); };
     f = await (prefetch?.i === i ? prefetch.p : locationForRound(i, probe));
   } catch (e) {
+    if (!game || game.index !== i) return;
     setLoading(false);
     toast(e.message || 'Ошибка сети', 5000);
-    show('menu');
+    // сыгранное не пропадает: если раунды уже были, показываем итоги по ним
+    if (completedRounds().length) showFinal();
+    else { game = null; show('menu'); }
     return;
   }
   prefetch = null;
@@ -311,10 +323,11 @@ async function playRound() {
   viewer.on('load', () => setLoading(false));
   setTimeout(() => setLoading(false), 12000);
   // заранее ищем следующее место
-  if (i + 1 < game.opts.rounds) {
+  if (game.endless || i + 1 < game.opts.rounds) {
     const p = locationForRound(i + 1);
-    p.catch(() => {});
-    prefetch = { i: i + 1, p };
+    const entry = { i: i + 1, p, f: null };
+    p.then((nf) => { entry.f = nf; }, () => {});
+    prefetch = entry;
   }
   if (game.opts.time) startTimer(game.opts.time);
 }
@@ -397,16 +410,28 @@ function showRoundResult(r, timeout) {
     if (pts.length > 1) resultMap.fitBounds(pts, fitPadding(14));
     else resultMap.setView(pts[0], 6);
   }, 30);
-  $('result-title').textContent = `Раунд ${game.index + 1} из ${game.opts.rounds} · ${REGIONS[game.opts.region].name}`;
+  releaseImagesExceptPrefetch();
+  $('result-title').textContent = game.endless
+    ? `Раунд ${game.index + 1} · бесконечный · ${REGIONS[game.opts.region].name}`
+    : `Раунд ${game.index + 1} из ${game.opts.rounds} · ${REGIONS[game.opts.region].name}`;
   setScale(r.points, MAX_POINTS);
   $('result-dist').innerHTML = r.guess
     ? `Ошибка — <b>${fmtDist(r.dist)}</b>.`
     : (timeout ? 'Время вышло, метка не поставлена.' : 'Метка не поставлена.');
   $('result-credit').innerHTML = creditHtml(r.feature);
   $('final-extra').classList.add('hidden');
-  const last = game.index + 1 >= game.opts.rounds;
+  const last = !game.endless && game.index + 1 >= game.opts.rounds;
   $('next-btn').textContent = last ? 'Итоги игры' : 'Следующий раунд';
   $('next-btn').onclick = last ? showFinal : () => { game.index += 1; show('game'); playRound(); };
+  $('finish-btn').classList.toggle('hidden', !game.endless);
+  $('finish-btn').textContent = `Закончить · ${plural(game.index + 1, 'раунд', 'раунда', 'раундов')}, ${plural(totalScore(), 'очко', 'очка', 'очков')}`;
+}
+
+function completedRounds() { return game.rounds.filter((r) => r && r.dist !== null); }
+function plural(n, one, few, many) {
+  const m10 = n % 10, m100 = n % 100;
+  const w = m10 === 1 && m100 !== 11 ? one : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? few : many;
+  return `${n.toLocaleString('ru-RU')} ${w}`;
 }
 
 // Число очков, подпись «/ максимум» и масштабная линейка.
@@ -449,7 +474,12 @@ function parseChallenge(text) {
 }
 
 function showFinal() {
-  const total = totalScore(), max = MAX_POINTS * game.opts.rounds;
+  clearInterval(timerId);
+  prefetch = null;
+  game.rounds = completedRounds(); // в бесконечном режиме неотвеченный раунд не считается
+  const n = game.rounds.length;
+  const total = totalScore(), max = MAX_POINTS * n;
+  $('finish-btn').classList.add('hidden');
   show('result');
   initResultMap();
   setTimeout(() => {
@@ -457,7 +487,7 @@ function showFinal() {
     const all = game.rounds.flatMap((r, i) => drawRound(r, i + 1));
     resultMap.fitBounds(all, fitPadding(12));
   }, 30);
-  $('result-title').textContent = `Итог · ${REGIONS[game.opts.region].name} · ${game.opts.rounds} раунд.`;
+  $('result-title').textContent = `Итог · ${REGIONS[game.opts.region].name} · ${game.endless ? 'бесконечный, ' : ''}${plural(n, 'раунд', 'раунда', 'раундов')}`;
   setScale(total, max);
   const answered = game.rounds.filter((r) => r.guess);
   const median = answered.length
@@ -477,14 +507,14 @@ function showFinal() {
 
 function saveBest(total, max) {
   const best = storageGet(BEST_KEY, []);
-  best.push({ s: total, m: max, r: game.opts.region, d: Date.now() });
+  best.push({ s: total, m: max, r: game.opts.region, d: Date.now(), e: game.endless || undefined });
   best.sort((a, b) => b.s / b.m - a.s / a.m);
   storageSet(BEST_KEY, best.slice(0, 8));
 }
 function renderBest() {
   const best = storageGet(BEST_KEY, []);
   $('best').innerHTML = best.length
-    ? best.map((b) => `<tr><td>${escapeHtml(REGIONS[b.r]?.name || b.r)}</td><td class="dim">${new Date(b.d).toLocaleDateString('ru-RU')}</td><td class="num">${b.s.toLocaleString('ru-RU')} <span class="dim">/ ${b.m.toLocaleString('ru-RU')}</span></td></tr>`).join('')
+    ? best.map((b) => `<tr><td>${escapeHtml(REGIONS[b.r]?.name || b.r)}${b.e ? ` <span class="dim">∞ ${b.m / MAX_POINTS}</span>` : ''}</td><td class="dim">${new Date(b.d).toLocaleDateString('ru-RU')}</td><td class="num">${b.s.toLocaleString('ru-RU')} <span class="dim">/ ${b.m.toLocaleString('ru-RU')}</span></td></tr>`).join('')
     : '<tr><td class="empty">Здесь появятся твои лучшие партии.</td></tr>';
 }
 
@@ -517,7 +547,14 @@ function initMenu() {
 
 function initGameControls() {
   $('guess-btn').onclick = () => submitGuess();
+  $('finish-btn').onclick = () => showFinal();
   $('quit').onclick = () => {
+    if (game?.endless && completedRounds().length) {
+      if (!confirm('Закончить игру? Текущий раунд не засчитается, итоги будут по сыгранным.')) return;
+      if (viewer) { viewer.destroy(); viewer = null; }
+      showFinal();
+      return;
+    }
     if (!confirm('Выйти в меню? Текущая игра пропадёт.')) return;
     clearInterval(timerId); game = null; if (viewer) { viewer.destroy(); viewer = null; } show('menu');
   };

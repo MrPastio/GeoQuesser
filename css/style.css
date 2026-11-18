@@ -61,6 +61,11 @@ input::placeholder { color: var(--ink-3); }
 }
 .btn:hover { background: var(--ink); color: var(--paper); }
 .inline { display: flex; }
+.btn-line {
+  width: 100%; padding: 11px 14px; margin-top: -6px; border: 1px solid var(--ink); border-top: 0;
+  font-size: 12px; letter-spacing: .04em; text-align: left; color: var(--ink-2);
+}
+.btn-line:hover { background: var(--ink); color: var(--paper); }
 
 /* ============ Меню ============ */
 #menu {
